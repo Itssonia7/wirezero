@@ -2,6 +2,7 @@
 
 #include <version>
 #include "buffer.hpp"
+#include "serializer.hpp"
 
 namespace wirezero {
 

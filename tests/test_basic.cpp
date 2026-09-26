@@ -42,3 +42,31 @@ TEST(BufferTest, OutOfBoundsReadsThrow) {
     // Reading another byte should throw out_of_range
     EXPECT_THROW(reader.read<int8_t>(), std::out_of_range);
 }
+
+TEST(PrimitiveSerializerTest, FreeFunctionsRoundtrip) {
+    std::array<std::byte, 32> buffer{};
+    wirezero::BufferWriter writer(buffer);
+
+    int32_t original_i32 = -123456;
+    uint64_t original_u64 = 9876543210ULL;
+    float original_f32 = 42.42f;
+    double original_f64 = 3.141592653589793;
+
+    // Pack using template free functions
+    wirezero::serialize(writer, original_i32);
+    wirezero::serialize(writer, original_u64);
+    wirezero::serialize(writer, original_f32);
+    wirezero::serialize(writer, original_f64);
+
+    // Unpack using template free functions
+    wirezero::BufferReader reader(buffer);
+    auto deserialized_i32 = wirezero::deserialize<int32_t>(reader);
+    auto deserialized_u64 = wirezero::deserialize<uint64_t>(reader);
+    auto deserialized_f32 = wirezero::deserialize<float>(reader);
+    auto deserialized_f64 = wirezero::deserialize<double>(reader);
+
+    EXPECT_EQ(original_i32, deserialized_i32);
+    EXPECT_EQ(original_u64, deserialized_u64);
+    EXPECT_FLOAT_EQ(original_f32, deserialized_f32);
+    EXPECT_DOUBLE_EQ(original_f64, deserialized_f64);
+}
