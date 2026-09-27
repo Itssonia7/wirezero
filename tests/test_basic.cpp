@@ -2,6 +2,7 @@
 #include "wirezero/wirezero.hpp"
 #include <vector>
 #include <array>
+#include <string>
 
 TEST(BufferTest, WriteAndReadPrimitives) {
     std::array<std::byte, 16> backing_buffer{};
@@ -69,4 +70,30 @@ TEST(PrimitiveSerializerTest, FreeFunctionsRoundtrip) {
     EXPECT_EQ(original_u64, deserialized_u64);
     EXPECT_FLOAT_EQ(original_f32, deserialized_f32);
     EXPECT_DOUBLE_EQ(original_f64, deserialized_f64);
+}
+
+TEST(StringSerializerTest, Roundtrip) {
+    std::array<std::byte, 128> buffer{};
+    wirezero::BufferWriter writer(buffer);
+
+    std::string original = "WireZero CAD/PLM Binary Protocol Engine";
+    wirezero::serialize(writer, std::string_view(original));
+
+    wirezero::BufferReader reader(buffer);
+    std::string deserialized = wirezero::deserialize_string(reader);
+
+    EXPECT_EQ(original, deserialized);
+}
+
+TEST(VectorSerializerTest, Roundtrip) {
+    std::array<std::byte, 256> buffer{};
+    wirezero::BufferWriter writer(buffer);
+
+    std::vector<int32_t> original = {10, 20, 30, 40, 50, -999};
+    wirezero::serialize(writer, original);
+
+    wirezero::BufferReader reader(buffer);
+    std::vector<int32_t> deserialized = wirezero::deserialize_vector<int32_t>(reader);
+
+    EXPECT_EQ(original, deserialized);
 }

@@ -8,20 +8,14 @@
 
 namespace wirezero {
 
-/**
- * @brief A safe reader view over a contiguous block of binary data.
- * Performs strict bounds checking to prevent buffer over-reads.
- */
 class BufferReader {
 public:
-    // Construct from a standard byte span or raw pointer + size
     constexpr explicit BufferReader(std::span<const std::byte> data) noexcept
         : data_(data), offset_(0) {}
 
     constexpr BufferReader(const uint8_t* ptr, size_t size) noexcept
         : data_(reinterpret_cast<const std::byte*>(ptr), size), offset_(0) {}
 
-    // Read a trivial type (primitives like int32_t, float, etc.) using zero-copy memcpy
     template <typename T>
     requires std::is_trivial_v<T> && std::is_standard_layout_v<T>
     T read() {
@@ -34,7 +28,25 @@ public:
         return value;
     }
 
-    // Peek a value without advancing the read offset
+    // Read a raw block of bytes (useful for strings and vectors)
+    void read_bytes(std::byte* dest, size_t size) {
+        if (offset_ + size > data_.size()) {
+            throw std::out_of_range("BufferReader: read_bytes out of bounds");
+        }
+        std::memcpy(dest, data_.data() + offset_, size);
+        offset_ += size;
+    }
+
+    // Get a zero-copy non-owning view directly into the buffer memory at current offset!
+    [[nodiscard]] std::span<const std::byte> read_span(size_t size) {
+        if (offset_ + size > data_.size()) {
+            throw std::out_of_range("BufferReader: read_span out of bounds");
+        }
+        auto span_view = data_.subspan(offset_, size);
+        offset_ += size;
+        return span_view;
+    }
+
     template <typename T>
     requires std::is_trivial_v<T> && std::is_standard_layout_v<T>
     T peek() const {
@@ -46,7 +58,6 @@ public:
         return value;
     }
 
-    // Skip N bytes
     constexpr void advance(size_t n) {
         if (offset_ + n > data_.size()) {
             throw std::out_of_range("BufferReader: advance out of bounds");
@@ -67,10 +78,6 @@ private:
     size_t offset_;
 };
 
-/**
- * @brief A safe writer view over a mutable block of binary data.
- * Performs strict bounds checking to prevent buffer overflows.
- */
 class BufferWriter {
 public:
     constexpr explicit BufferWriter(std::span<std::byte> data) noexcept
@@ -79,7 +86,6 @@ public:
     constexpr BufferWriter(uint8_t* ptr, size_t size) noexcept
         : data_(reinterpret_cast<std::byte*>(ptr), size), offset_(0) {}
 
-    // Write a trivial type directly into the buffer via memcpy
     template <typename T>
     requires std::is_trivial_v<T> && std::is_standard_layout_v<T>
     void write(const T& value) {
@@ -88,6 +94,15 @@ public:
         }
         std::memcpy(data_.data() + offset_, &value, sizeof(T));
         offset_ += sizeof(T);
+    }
+
+    // Write a raw block of bytes
+    void write_bytes(const std::byte* src, size_t size) {
+        if (offset_ + size > data_.size()) {
+            throw std::out_of_range("BufferWriter: write_bytes out of bounds");
+        }
+        std::memcpy(data_.data() + offset_, src, size);
+        offset_ += size;
     }
 
     [[nodiscard]] constexpr size_t capacity() const noexcept {
