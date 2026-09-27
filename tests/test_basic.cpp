@@ -97,3 +97,31 @@ TEST(VectorSerializerTest, Roundtrip) {
 
     EXPECT_EQ(original, deserialized);
 }
+
+// Define a sample CAD/PLM data struct
+struct CADPart {
+    int32_t part_id;
+    double volume;
+    std::string part_name;
+};
+
+// Register it with our WireZero reflection macro
+WIREZERO_REFLECT_STRUCT(CADPart, obj.part_id, obj.volume, obj.part_name)
+
+TEST(StructReflectionTest, CADPartRoundtrip) {
+    std::array<std::byte, 512> buffer{};
+    wirezero::BufferWriter writer(buffer);
+
+    CADPart original{84920, 1548.723, "Bracket_Assembly_v2.step"};
+
+    // Serialize struct
+    wirezero::serialize(writer, original);
+
+    // Deserialize struct
+    wirezero::BufferReader reader(buffer);
+    CADPart deserialized = wirezero::deserialize<CADPart>(reader);
+
+    EXPECT_EQ(original.part_id, deserialized.part_id);
+    EXPECT_DOUBLE_EQ(original.volume, deserialized.volume);
+    EXPECT_EQ(original.part_name, deserialized.part_name);
+}

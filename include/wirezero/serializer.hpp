@@ -5,11 +5,19 @@
 #include <string>
 #include <vector>
 #include <string_view>
+#include <tuple>
 
 namespace wirezero {
 
 template <typename T>
 concept TrivialSerializable = std::is_trivial_v<T> && std::is_standard_layout_v<T>;
+
+// Forward declarations for general dispatch
+template <typename T>
+inline void serialize(BufferWriter& writer, const T& value);
+
+template <typename T>
+inline T deserialize(BufferReader& reader);
 
 // -----------------------------------------------------------------------------
 // Primitives
@@ -44,8 +52,14 @@ inline std::string deserialize_string(BufferReader& reader) {
     return std::string(reinterpret_cast<const char*>(span_bytes.data()), len);
 }
 
+// Specialization for std::string deserialization via template dispatch
+template <>
+inline std::string deserialize<std::string>(BufferReader& reader) {
+    return deserialize_string(reader);
+}
+
 // -----------------------------------------------------------------------------
-// std::vector Serialization (for trivial types)
+// std::vector Serialization
 // -----------------------------------------------------------------------------
 template <typename T>
 requires TrivialSerializable<T>
@@ -70,4 +84,50 @@ inline std::vector<T> deserialize_vector(BufferReader& reader) {
     return vec;
 }
 
+// -----------------------------------------------------------------------------
+// C++20 Struct Metaprogramming & Reflection Helpers
+// -----------------------------------------------------------------------------
+
+/**
+ * @brief Serializes a tuple of struct fields recursively using C++17/20 fold expressions.
+ */
+template <typename... Args>
+inline void serialize_tuple(BufferWriter& writer, const std::tuple<Args...>& t) {
+    std::apply([&writer](const auto&... args) {
+        (serialize(writer, args), ...);
+    }, t);
+}
+
+/**
+ * @brief Deserializes a tuple of struct field references recursively using fold expressions.
+ */
+template <typename... Args>
+inline void deserialize_tuple(BufferReader& reader, std::tuple<Args&...>& t) {
+    std::apply([&reader](auto&... args) {
+        ((args = deserialize<std::remove_cvref_t<decltype(args)>>(reader)), ...);
+    }, t);
+}
+
 } // namespace wirezero
+
+/**
+ * @brief Macro to automatically generate serialize and deserialize functions for user structs.
+ * Example usage:
+ *   struct Part { int id; std::string name; };
+ *   WIREZERO_REFLECT_STRUCT(Part, id, name)
+ */
+#define WIREZERO_REFLECT_STRUCT(StructName, ...) \
+    inline void serialize(wirezero::BufferWriter& writer, const StructName& obj) { \
+        auto t = std::tie(__VA_ARGS__); \
+        wirezero::serialize_tuple(writer, t); \
+    } \
+    inline StructName deserialize_##StructName(wirezero::BufferReader& reader) { \
+        StructName obj{}; \
+        auto t = std::tie(__VA_ARGS__); \
+        wirezero::deserialize_tuple(reader, t); \
+        return obj; \
+    } \
+    template <> \
+    inline StructName wirezero::deserialize<StructName>(wirezero::BufferReader& reader) { \
+        return deserialize_##StructName(reader); \
+    }
