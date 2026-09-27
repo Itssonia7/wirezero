@@ -3,6 +3,8 @@
 #include <vector>
 #include <array>
 #include <string>
+#include <chrono>
+#include <iostream>
 
 TEST(BufferTest, WriteAndReadPrimitives) {
     std::array<std::byte, 16> backing_buffer{};
@@ -124,4 +126,38 @@ TEST(StructReflectionTest, CADPartRoundtrip) {
     EXPECT_EQ(original.part_id, deserialized.part_id);
     EXPECT_DOUBLE_EQ(original.volume, deserialized.volume);
     EXPECT_EQ(original.part_name, deserialized.part_name);
+}
+
+TEST(BenchmarkTest, CADPartSerializationSpeed) {
+    constexpr int iterations = 100000;
+    std::vector<std::byte> large_buffer(iterations * 128);
+    
+    CADPart original{1337, 9876.5432, "High_Precision_Bearing_Assembly.step"};
+
+    auto start = std::chrono::high_resolution_clock::now();
+    
+    wirezero::BufferWriter writer(large_buffer);
+    for (int i = 0; i < iterations; ++i) {
+        wirezero::serialize(writer, original);
+    }
+
+    auto serialize_end = std::chrono::high_resolution_clock::now();
+
+    wirezero::BufferReader reader(large_buffer);
+    for (int i = 0; i < iterations; ++i) {
+        volatile CADPart deserialized = wirezero::deserialize<CADPart>(reader);
+        (void)deserialized;
+    }
+
+    auto deserialize_end = std::chrono::high_resolution_clock::now();
+
+    auto serialize_duration = std::chrono::duration_cast<std::chrono::milliseconds>(serialize_end - start).count();
+    auto deserialize_duration = std::chrono::duration_cast<std::chrono::milliseconds>(deserialize_end - serialize_end).count();
+
+    std::cout << "\n========================================\n";
+    std::cout << "[WIREZERO BENCHMARK] Serialized " << iterations << " structs in " << serialize_duration << " ms\n";
+    std::cout << "[WIREZERO BENCHMARK] Deserialized " << iterations << " structs in " << deserialize_duration << " ms\n";
+    std::cout << "========================================\n";
+    
+    SUCCEED();
 }
